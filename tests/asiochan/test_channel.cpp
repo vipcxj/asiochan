@@ -1,9 +1,10 @@
 #include <numeric>
 #include <ranges>
 #include <string>
+#include <atomic>
 
 #include <asiochan/channel.hpp>
-#include <catch2/catch.hpp>
+#include "catch2/catch_all.hpp"
 
 #ifdef ASIOCHAN_USE_STANDALONE_ASIO
 
@@ -27,7 +28,7 @@ namespace asio = asiochan::asio;
 
 TEST_CASE("Channels")
 {
-    auto const num_threads = GENERATE(range(1u, 2u));
+    auto const num_threads = GENERATE(range(10u, 20u));
     auto thread_pool = asio::thread_pool{num_threads};
 
     SECTION("Ping-pong")
@@ -36,7 +37,7 @@ TEST_CASE("Channels")
 
         auto ping_task = asio::co_spawn(
             thread_pool,
-            [channel]() mutable -> asio::awaitable<void>
+            [channel]() -> asio::awaitable<void>
             {
                 co_await channel.write("ping");
                 auto const recv = co_await channel.read();
@@ -46,7 +47,7 @@ TEST_CASE("Channels")
 
         auto pong_task = asio::co_spawn(
             thread_pool,
-            [channel]() mutable -> asio::awaitable<void>
+            [channel]() -> asio::awaitable<void>
             {
                 auto const recv = co_await channel.read();
                 CHECK(recv == "ping");
@@ -82,6 +83,34 @@ TEST_CASE("Channels")
         }
         auto const last_recv = read_channel.try_read();
         CHECK(not last_recv.has_value());
+    }
+
+    SECTION("Concurrence buffered channel")
+    {
+        static constexpr auto buffer_size = 1;
+
+        auto channel = asiochan::channel<int, buffer_size>{};
+        std::atomic_int sum {0};
+        for (size_t i = 0; i < 100; i++)
+        {
+            asio::co_spawn(
+                thread_pool,
+                [channel, i]() -> asio::awaitable<void>
+                {
+                    co_await channel.write(i);
+                },
+                asio::use_future);
+            asio::co_spawn(
+                thread_pool,
+                [channel, &sum]() -> asio::awaitable<void>
+                {
+                    auto i = co_await channel.read();
+                    ++sum;
+                },
+                asio::use_future);
+        }
+        thread_pool.join();
+        CHECK(sum.load() == 100);
     }
 
     SECTION("Buffered channel of void")
@@ -149,7 +178,7 @@ TEST_CASE("Channels")
             source_tasks.push_back(
                 asio::co_spawn(
                     thread_pool,
-                    [write_channel, task_id, &source_values]() mutable -> asio::awaitable<void>
+                    [write_channel, task_id, &source_values]() -> asio::awaitable<void>
                     {
                         auto const start = task_id * num_tokens_per_task;
                         for (auto const i : std::views::iota(start, start + num_tokens_per_task))
@@ -167,7 +196,7 @@ TEST_CASE("Channels")
             sink_tasks.push_back(
                 asio::co_spawn(
                     thread_pool,
-                    [read_channel, task_id, &sink_values]() mutable -> asio::awaitable<void>
+                    [read_channel, task_id, &sink_values]() -> asio::awaitable<void>
                     {
                         auto const start = task_id * num_tokens_per_task;
                         for (auto const i : std::views::iota(start, start + num_tokens_per_task))

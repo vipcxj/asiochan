@@ -24,11 +24,22 @@ namespace asiochan::detail
             value_.emplace(std::move(value));
         }
 
+        auto value() noexcept -> std::optional<T>&
+        {
+            return value_;
+        }
+
+        auto value() const noexcept -> std::optional<T> const&
+        {
+            return value_;
+        }
+
         friend void transfer(send_slot& from, send_slot& to) noexcept
         {
             assert(from.value_.has_value());
             assert(not to.value_.has_value());
-            to.value_.emplace(*std::move(from.value_));
+            to.value_.swap(from.value_);
+            assert(not from.value_.has_value());
         }
 
       private:

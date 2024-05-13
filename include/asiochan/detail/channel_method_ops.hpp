@@ -23,7 +23,7 @@ namespace asiochan::detail
     {
       public:
         // clang-format off
-        [[nodiscard]] auto try_read() -> std::optional<T>
+        [[nodiscard]] auto try_read() const -> std::optional<T>
         requires (static_cast<bool>(flags & readable))
         // clang-format on
         {
@@ -40,7 +40,7 @@ namespace asiochan::detail
         }
 
         // clang-format off
-        [[nodiscard]] auto try_write(T value) -> bool
+        [[nodiscard]] auto try_write(T value) const -> bool
         requires (static_cast<bool>(flags & writable))
                  and (buff_size != unbounded_channel_buff)
         // clang-format on
@@ -53,7 +53,7 @@ namespace asiochan::detail
         }
 
         // clang-format off
-        [[nodiscard]] auto read() -> asio::awaitable<T, Executor>
+        [[nodiscard]] auto read() const -> asio::awaitable<T, Executor>
         requires (static_cast<bool>(flags & readable))
         // clang-format on
         {
@@ -63,7 +63,7 @@ namespace asiochan::detail
         }
 
         // clang-format off
-        [[nodiscard]] auto write(T value) -> asio::awaitable<void, Executor>
+        [[nodiscard]] auto write(T value) const -> asio::awaitable<void, Executor>
         requires (static_cast<bool>(flags & writable))
                  and (buff_size != unbounded_channel_buff)
         // clang-format on
@@ -72,7 +72,7 @@ namespace asiochan::detail
         }
 
         // clang-format off
-        void write(T value)
+        void write(T value) const
         requires (static_cast<bool>(flags & writable))
                  and (buff_size == unbounded_channel_buff)
         // clang-format on
@@ -85,6 +85,11 @@ namespace asiochan::detail
         {
             return static_cast<Derived&>(*this);
         }
+
+        [[nodiscard]] auto derived() const noexcept -> const Derived&
+        {
+            return static_cast<const Derived&>(*this);
+        }
     };
 
     template <channel_buff_size buff_size,
@@ -95,7 +100,7 @@ namespace asiochan::detail
     {
       public:
         // clang-format off
-        [[nodiscard]] auto try_read() -> bool
+        [[nodiscard]] auto try_read() const -> bool
         requires (static_cast<bool>(flags & readable))
         // clang-format on
         {
@@ -107,7 +112,7 @@ namespace asiochan::detail
         }
 
         // clang-format off
-        [[nodiscard]] auto try_write() -> bool
+        [[nodiscard]] auto try_write() const -> bool
         requires (static_cast<bool>(flags & writable))
                  and (buff_size != unbounded_channel_buff)
         // clang-format on
@@ -120,7 +125,7 @@ namespace asiochan::detail
         }
 
         // clang-format off
-        [[nodiscard]] auto read() -> asio::awaitable<void>
+        [[nodiscard]] auto read() const -> asio::awaitable<void>
         requires (static_cast<bool>(flags & readable))
         // clang-format on
         {
@@ -128,7 +133,7 @@ namespace asiochan::detail
         }
 
         // clang-format off
-        [[nodiscard]] auto write() -> asio::awaitable<void>
+        [[nodiscard]] auto write() const -> asio::awaitable<void>
         requires (static_cast<bool>(flags & writable))
                  and (buff_size != unbounded_channel_buff)
         // clang-format on
@@ -137,7 +142,7 @@ namespace asiochan::detail
         }
 
         // clang-format off
-        void write()
+        void write() const
         requires (static_cast<bool>(flags & writable))
                  and (buff_size == unbounded_channel_buff)
         // clang-format on
@@ -149,6 +154,11 @@ namespace asiochan::detail
         [[nodiscard]] auto derived() noexcept -> Derived&
         {
             return static_cast<Derived&>(*this);
+        }
+
+        [[nodiscard]] auto derived() const noexcept -> const Derived&
+        {
+            return static_cast<const Derived&>(*this);
         }
     };
 }  // namespace asiochan::detail

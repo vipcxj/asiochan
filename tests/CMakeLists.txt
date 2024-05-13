@@ -10,11 +10,12 @@ target_include_directories(
   "${CMAKE_CURRENT_SOURCE_DIR}"
   "${CMAKE_CURRENT_BINARY_DIR}"
 )
+find_package(Catch2 CONFIG REQUIRED)
 target_link_libraries(
   asiochan_tests
 
   PRIVATE
-  CONAN_PKG::catch2
+  Catch2::Catch2 Catch2::Catch2WithMain
   Threads::Threads
   asiochan::asiochan
 )

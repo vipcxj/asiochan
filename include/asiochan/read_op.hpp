@@ -25,7 +25,7 @@ namespace asiochan
 
       public:
         template <std::convertible_to<T> U>
-        read_result(U&& value, channel_type<T> auto& channel)
+        read_result(U&& value, const channel_type<T> auto& channel)
           : base{channel}
           , value_{std::forward<U>(value)}
         {
@@ -91,32 +91,32 @@ namespace asiochan
             {
             }
 
-            [[nodiscard]] auto submit_if_ready() -> std::optional<std::size_t>
+            [[nodiscard]] auto submit_if_ready() const -> std::optional<std::size_t>
             {
                 auto ready_alternative = std::optional<std::size_t>{};
 
                 ([&]<std::size_t... indices>(std::index_sequence<indices...>)
                  {
-                     ([&]<typename ChannelState>(ChannelState& channel_state)
+                     ([&]<typename ChannelState>(const ChannelState& channel_state)
                       {
                           constexpr auto channel_index = indices;
-                          auto const lock = std::scoped_lock{channel_state.mutex()};
+                          auto const lock = std::scoped_lock{channel_state->mutex()};
 
-                          if constexpr (ChannelState::buff_size != 0)
+                          if constexpr (ChannelState::element_type::buff_size != 0)
                           {
-                              if (not channel_state.buffer().empty())
+                              if (not channel_state->buffer().empty())
                               {
                                   // Get a value from the buffer.
-                                  channel_state.buffer().dequeue(slot_);
+                                  channel_state->buffer().dequeue(slot_);
                                   ready_alternative = channel_index;
 
-                                  if constexpr (not ChannelState::write_never_waits)
+                                  if constexpr (not ChannelState::element_type::write_never_waits)
                                   {
-                                      if (auto const writer = channel_state.writer_list().dequeue_first_available())
+                                      if (auto const writer = channel_state->writer_list().dequeue_first_available())
                                       {
                                           // Buffer was full with writers waiting.
                                           // Wake the oldest writer and store his value in the buffer.
-                                          channel_state.buffer().enqueue(*writer->slot);
+                                          channel_state->buffer().enqueue(*writer->slot);
                                           detail::notify_waiter(*writer);
                                       }
                                   }
@@ -124,7 +124,7 @@ namespace asiochan
                                   return true;
                               }
                           }
-                          else if (auto const writer = channel_state.writer_list().dequeue_first_available())
+                          else if (auto const writer = channel_state->writer_list().dequeue_first_available())
                           {
                               // Get a value directly from a waiting writer.
                               transfer(*writer->slot, slot_);
@@ -135,7 +135,7 @@ namespace asiochan
                           }
 
                           return false;
-                      }(std::get<indices>(channels_).shared_state())
+                      }(std::get<indices>(channels_).shared_state_ptr())
                       or ...);
                  }(std::index_sequence_for<ChannelsHead, ChannelsTail...>{}));
 
@@ -145,22 +145,22 @@ namespace asiochan
             [[nodiscard]] auto submit_with_wait(
                 detail::select_wait_context<executor_type>& select_ctx,
                 detail::select_waiter_token const base_token,
-                wait_state_type& wait_state)
+                wait_state_type& wait_state) const
                 -> std::optional<std::size_t>
             {
                 return ([&]<std::size_t... indices>(std::index_sequence<indices...>)
                         {
                             auto ready_alternative = std::optional<std::size_t>{};
 
-                            ([&]<typename ChannelState>(ChannelState& channel_state)
+                            ([&]<typename ChannelState>(const ChannelState& channel_state)
                              {
                                  constexpr auto channel_index = indices;
                                  auto const token = base_token + channel_index;
-                                 auto const lock = std::scoped_lock{channel_state.mutex()};
+                                 auto const lock = std::scoped_lock{channel_state->mutex()};
 
-                                 if constexpr (ChannelState::buff_size != 0)
+                                 if constexpr (ChannelState::element_type::buff_size != 0)
                                  {
-                                     if (not channel_state.buffer().empty())
+                                     if (not channel_state->buffer().empty())
                                      {
                                          if (not claim(select_ctx))
                                          {
@@ -169,15 +169,15 @@ namespace asiochan
                                          }
 
                                          // Get a value from the buffer.
-                                         channel_state.buffer().dequeue(slot_);
+                                         channel_state->buffer().dequeue(slot_);
 
-                                         if constexpr (not ChannelState::write_never_waits)
+                                         if constexpr (not ChannelState::element_type::write_never_waits)
                                          {
-                                             if (auto const writer = channel_state.writer_list().dequeue_first_available())
+                                             if (auto const writer = channel_state->writer_list().dequeue_first_available())
                                              {
                                                  // Buffer was full with writers waiting.
                                                  // Wake the oldest writer and store his value in the buffer.
-                                                 channel_state.buffer().enqueue(*writer->slot);
+                                                 channel_state->buffer().enqueue(*writer->slot);
                                                  detail::notify_waiter(*writer);
                                              }
                                          }
@@ -187,7 +187,7 @@ namespace asiochan
                                          return true;
                                      }
                                  }
-                                 else if (auto const writer = channel_state.writer_list().dequeue_first_available(select_ctx))
+                                 else if (auto const writer = channel_state->writer_list().dequeue_first_available(select_ctx))
                                  {
                                      // Get a value directly from a waiting writer.
                                      transfer(*writer->slot, slot_);
@@ -204,10 +204,10 @@ namespace asiochan
                                  waiter_node.token = token;
                                  waiter_node.next = nullptr;
 
-                                 channel_state.reader_list().enqueue(waiter_node);
+                                 channel_state->reader_list().enqueue(waiter_node);
 
                                  return false;
-                             }(std::get<indices>(channels_).shared_state())
+                             }(std::get<indices>(channels_).shared_state_ptr())
                              or ...);
 
                             return ready_alternative;
@@ -216,11 +216,11 @@ namespace asiochan
 
             void clear_wait(
                 std::optional<std::size_t> const successful_alternative,
-                wait_state_type& wait_state)
+                wait_state_type& wait_state) const
             {
                 ([&]<std::size_t... indices>(std::index_sequence<indices...>)
                  {
-                     ([&](auto& channel_state)
+                     ([&](const auto & channel_state)
                       {
                           constexpr auto channel_index = indices;
                           auto& waiter_node = wait_state.waiter_nodes[channel_index];
@@ -231,20 +231,20 @@ namespace asiochan
                               return;
                           }
 
-                          auto const lock = std::scoped_lock{channel_state.mutex()};
-                          channel_state.reader_list().dequeue(*waiter_node);
-                      }(std::get<indices>(channels_).shared_state()),
+                          auto const lock = std::scoped_lock{channel_state->mutex()};
+                          channel_state->reader_list().dequeue(*waiter_node);
+                      }(std::get<indices>(channels_).shared_state_ptr()),
                       ...);
                  }(std::index_sequence_for<ChannelsHead, ChannelsTail...>{}));
             }
 
-            [[nodiscard]] auto get_result(std::size_t const successful_alternative) noexcept -> result_type
+            [[nodiscard]] auto get_result(std::size_t const successful_alternative) const noexcept -> result_type
             {
                 auto result = std::optional<result_type>{};
 
                 ([&]<std::size_t... indices>(std::index_sequence<indices...>)
                  {
-                     ([&](auto& channel)
+                     ([&](const auto& channel)
                       {
                           constexpr auto channel_index = indices;
 
@@ -273,7 +273,7 @@ namespace asiochan
 
           private:
             std::tuple<ChannelsHead&, ChannelsTail&...> channels_;
-            [[no_unique_address]] slot_type slot_;
+            [[no_unique_address]] mutable slot_type slot_;
         };
 
         template <any_channel_type ChannelsHead, any_channel_type... ChannelsTail>

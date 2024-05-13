@@ -28,7 +28,7 @@ namespace asiochan
                      typename T::send_type,
                      typename T::executor_type>;
 
-        { channel.shared_state() } noexcept -> std::same_as<typename T::shared_state_type&>;
+        { channel.shared_state_ptr() } noexcept -> std::same_as<const typename T::shared_state_ptr_type&>;
     };
 
     template <typename T>

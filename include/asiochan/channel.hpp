@@ -21,6 +21,7 @@ namespace asiochan
       public:
         using executor_type = Executor;
         using shared_state_type = detail::channel_shared_state<T, Executor, buff_size>;
+        using shared_state_ptr_type = std::shared_ptr<shared_state_type>;
         using send_type = T;
 
         static constexpr auto flags = flags_;
@@ -60,6 +61,11 @@ namespace asiochan
             return *shared_state_;
         }
 
+        [[nodiscard]] auto shared_state_ptr() const noexcept -> const shared_state_ptr_type&
+        {
+            return shared_state_;
+        }
+
         [[nodiscard]] friend auto operator==(
             channel_base const& lhs,
             channel_base const& rhs) noexcept -> bool
@@ -72,7 +78,7 @@ namespace asiochan
         template <sendable, channel_buff_size, channel_flags, asio::execution::executor>
         friend class channel_base;
 
-        std::shared_ptr<shared_state_type> shared_state_;
+        shared_state_ptr_type shared_state_;
     };
 
     template <sendable T, channel_buff_size buff_size, asio::execution::executor Executor>
