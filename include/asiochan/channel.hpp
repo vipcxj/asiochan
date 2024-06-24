@@ -13,18 +13,19 @@
 namespace asiochan
 {
     template <sendable T,
-              channel_buff_size buff_size,
+              channel_buff_size buff_size_,
               channel_flags flags_,
               asio::execution::executor Executor>
     class channel_base
     {
       public:
         using executor_type = Executor;
-        using shared_state_type = detail::channel_shared_state<T, Executor, buff_size>;
+        using shared_state_type = detail::channel_shared_state<T, Executor, buff_size_>;
         using shared_state_ptr_type = std::shared_ptr<shared_state_type>;
         using send_type = T;
 
         static constexpr auto flags = flags_;
+        static constexpr auto buff_size = buff_size_;
 
         [[nodiscard]] channel_base()
           : shared_state_{std::make_shared<shared_state_type>()}
@@ -35,7 +36,7 @@ namespace asiochan
         template <channel_flags other_flags>
         requires ((other_flags & flags) == flags)
         [[nodiscard]] channel_base(
-            channel_base<T, buff_size, other_flags, Executor> const& other)
+            channel_base<T, buff_size_, other_flags, Executor> const& other)
           : shared_state_{other.shared_state_}
         // clang-format on
         {
@@ -45,7 +46,7 @@ namespace asiochan
         template <channel_flags other_flags>
         requires ((other_flags & flags) == flags)
         [[nodiscard]] channel_base(
-            channel_base<T, buff_size, other_flags, Executor>&& other)
+            channel_base<T, buff_size_, other_flags, Executor>&& other)
           : shared_state_{std::move(other.shared_state_)}
         // clang-format on
         {
