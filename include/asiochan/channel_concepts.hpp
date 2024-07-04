@@ -22,8 +22,8 @@ namespace asiochan
 
         typename T::shared_state_type;
         typename T::send_type;
-        { T::flags } -> std::same_as<channel_flags>;
-        T::buff_size;
+
+        requires std::is_same_v<std::decay_t<decltype(T::flags)>, channel_flags>;
         requires std::is_integral_v<decltype(T::buff_size)>;
 
         requires detail::channel_shared_state_type<

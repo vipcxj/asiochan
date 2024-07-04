@@ -160,6 +160,12 @@ TEST_CASE("Channels")
         CHECK(not last_recv.has_value());
     }
 
+    SECTION("Channel of channel")
+    {
+        using CH0 = asiochan::channel<int>;
+        asiochan::channel<CH0> ch_of_ch0;
+    }
+
     SECTION("Multiple writers and receivers")
     {
         static constexpr auto num_tokens_per_task = 5;

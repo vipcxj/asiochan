@@ -32,25 +32,58 @@ namespace asiochan
         {
         }
 
-        // clang-format off
-        template <channel_flags other_flags>
-        requires ((other_flags & flags) == flags)
         [[nodiscard]] channel_base(
-            channel_base<T, buff_size_, other_flags, Executor> const& other)
+            channel_base<T, buff_size_, flags_, Executor> const& other) noexcept
           : shared_state_{other.shared_state_}
-        // clang-format on
         {
         }
 
         // clang-format off
         template <channel_flags other_flags>
-        requires ((other_flags & flags) == flags)
+        requires (other_flags != flags && (other_flags & flags) == flags)
         [[nodiscard]] channel_base(
-            channel_base<T, buff_size_, other_flags, Executor>&& other)
+            channel_base<T, buff_size_, other_flags, Executor> const& other) noexcept
+          : shared_state_{other.shared_state_}
+        // clang-format on
+        {
+        }
+
+        [[nodiscard]] channel_base(
+            channel_base<T, buff_size_, flags_, Executor>&& other) noexcept
+          : shared_state_{std::move(other.shared_state_)}
+        {
+        }
+
+        // clang-format off
+        template <channel_flags other_flags>
+        requires (other_flags != flags && (other_flags & flags) == flags)
+        [[nodiscard]] channel_base(
+            channel_base<T, buff_size_, other_flags, Executor>&& other) noexcept
           : shared_state_{std::move(other.shared_state_)}
         // clang-format on
         {
         }
+
+        channel_base<T, buff_size_, flags_, Executor>& operator = (channel_base<T, buff_size_, flags_, Executor> const& other) noexcept = default;
+
+        template <channel_flags other_flags>
+        requires (other_flags != flags && (other_flags & flags) == flags)
+        channel_base<T, buff_size_, flags_, Executor>& operator = (channel_base<T, buff_size_, other_flags, Executor> const& other) noexcept
+        {
+            shared_state_ = other.shared_state_;
+            return *this;
+        }
+
+        channel_base<T, buff_size_, flags_, Executor>& operator = (channel_base<T, buff_size_, flags_, Executor> && other) noexcept = default;
+
+        template <channel_flags other_flags>
+        requires (other_flags != flags && (other_flags & flags) == flags)
+        channel_base<T, buff_size_, flags_, Executor>& operator = (channel_base<T, buff_size_, other_flags, Executor> && other) noexcept
+        {
+            shared_state_ = std::move(other.shared_state_);
+            return *this;
+        }
+
 
         [[nodiscard]] auto shared_state() noexcept -> shared_state_type&
         {
@@ -93,6 +126,7 @@ namespace asiochan
 
       public:
         using base::base;
+        using base::operator =;
 
         using ops::try_read;
 
