@@ -4,6 +4,8 @@
 #include <cstddef>
 #include <mutex>
 
+#include <iostream>
+
 #include "asiochan/async_promise.hpp"
 #include "asiochan/detail/send_slot.hpp"
 #include "asiochan/sendable.hpp"
@@ -68,6 +70,8 @@ namespace asiochan::detail
 
         void dequeue(node_type& node) noexcept
         {
+            assert(node.prev || &node == first_);
+            assert(node.next || &node == last_);
             if (&node == first_)
             {
                 first_ = node.next;
@@ -79,13 +83,13 @@ namespace asiochan::detail
             if (node.prev)
             {
                 node.prev->next = node.next;
-                node.prev = nullptr;
             }
             if (node.next)
             {
                 node.next->prev = node.prev;
-                node.next = nullptr;
             }
+            node.prev = nullptr;
+            node.next = nullptr;
         }
 
         auto dequeue_first_available(
@@ -130,6 +134,17 @@ namespace asiochan::detail
             }
 
             return nullptr;
+        }
+
+        void print() const {
+            std::cout << "waiter list " << this << ":";
+            auto node = first_;
+            while (node)
+            {
+                std::cout << " " << node;
+                node = node->next;
+            }
+            std::cout << std::endl;
         }
 
       private:

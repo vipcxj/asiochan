@@ -13,6 +13,7 @@
 #include <asio/io_context.hpp>
 #include <asio/thread_pool.hpp>
 #include <asio/use_future.hpp>
+#include <asio/steady_timer.hpp>
 
 #else
 
@@ -21,10 +22,36 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
+#include <boost/asio/steady_timer.hpp>
 
 #endif
 
 namespace asio = asiochan::asio;
+
+auto asleep(std::chrono::nanoseconds dur) -> asio::awaitable<void>
+{
+    auto executor = co_await asio::this_coro::executor;
+    auto timer = asio::steady_timer{executor};
+    timer.expires_after(dur);
+    co_await timer.async_wait(asio::use_awaitable);
+    co_return;
+}
+
+auto avoid() -> asio::awaitable<void>
+{
+    co_return;
+}
+
+template<asio::execution::executor Executor>
+auto make_timeout(std::chrono::nanoseconds dur, Executor executor) -> asiochan::channel<void, 1>
+{
+    asiochan::channel<void, 1> ch {};
+    asio::co_spawn(std::move(executor), [dur, ch]() -> asio::awaitable<void> {
+        co_await asleep(dur);
+        co_await ch.write();
+    }, asio::detached);
+    return ch;
+}
 
 TEST_CASE("Channels")
 {
@@ -225,5 +252,39 @@ TEST_CASE("Channels")
         {
             source_task.get();
         }
+    }
+    SECTION("Make sure crash when channel_waiter_list.dequeue not happen again")
+    {
+        using namespace asiochan;
+        auto task = asio::co_spawn(
+            thread_pool,
+            []() -> asio::awaitable<void>
+            {
+                auto executor = co_await asio::this_coro::executor;
+                channel<int, 1> ch {};
+                for (size_t i = 0; i < 2; i++)
+                {
+                    unbounded_channel<void> res {};
+                    for (size_t i = 0; i < 3; i++)
+                    {
+                        asio::co_spawn(executor, [ch, res]() -> asio::awaitable<void>{
+                            auto executor = co_await asio::this_coro::executor;
+                            auto timeouter = make_timeout(std::chrono::milliseconds(30), executor);
+                            co_await asiochan::select(
+                                asiochan::ops::read(timeouter),
+                                asiochan::ops::read(ch)
+                            );
+                            res.write();
+                        }, asio::detached);
+                    }
+                    for (size_t i = 0; i < 3; i++)
+                    {
+                        co_await res.read();
+                    }
+                }
+            },
+            asio::use_future
+        );
+        task.get();
     }
 }
