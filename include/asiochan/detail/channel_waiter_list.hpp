@@ -70,8 +70,8 @@ namespace asiochan::detail
 
         void dequeue(node_type& node) noexcept
         {
-            assert(node.prev || &node == first_);
-            assert(node.next || &node == last_);
+            assert(node.prev || &node == first_ || (!node.prev && !node.next)); // node may have been removed
+            assert(node.next || &node == last_ || (!node.prev && !node.next)); // node may have been removed
             if (&node == first_)
             {
                 first_ = node.next;
@@ -88,8 +88,14 @@ namespace asiochan::detail
             {
                 node.next->prev = node.prev;
             }
-            node.prev = nullptr;
-            node.next = nullptr;
+            if (node.prev)
+            {
+                node.prev = nullptr;
+            }
+            if (node.next)
+            {
+                node.next = nullptr;
+            }
         }
 
         auto dequeue_first_available(
