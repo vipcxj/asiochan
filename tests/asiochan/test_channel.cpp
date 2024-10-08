@@ -3,6 +3,8 @@
 #include <string>
 #include <atomic>
 
+#include <iostream>
+
 #include <asiochan/channel.hpp>
 #include "catch2/catch_all.hpp"
 
@@ -253,6 +255,7 @@ TEST_CASE("Channels")
             source_task.get();
         }
     }
+
     SECTION("Make sure crash when channel_waiter_list.dequeue not happen again")
     {
         using namespace asiochan;

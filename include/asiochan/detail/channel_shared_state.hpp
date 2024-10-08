@@ -10,6 +10,10 @@
 #include "asiochan/detail/send_slot.hpp"
 #include "asiochan/sendable.hpp"
 
+#ifdef ASIOCHAN_CH_ALLOCATE_TRACER
+#include "asiochan/detail/allocate_tracer.hpp"
+#endif
+
 namespace asiochan::detail
 {
     template <sendable T, asio::execution::executor Executor, bool enabled>
@@ -46,6 +50,25 @@ namespace asiochan::detail
         using mutex_type = std::mutex;
         using buffer_type = channel_buffer<T, buff_size_>;
         using reader_list_type = channel_waiter_list<T, Executor>;
+
+        channel_shared_state() noexcept(noexcept(channel_shared_state_writer_list_base<T, Executor, buff_size_ != unbounded_channel_buff>{}))
+        {
+#ifdef ASIOCHAN_CH_ALLOCATE_TRACER
+            allocate_tracer::ctor();
+#endif
+        }
+
+        ~channel_shared_state() noexcept(noexcept(channel_shared_state_writer_list_base<T, Executor, buff_size_ != unbounded_channel_buff>{}))
+        {
+#ifdef ASIOCHAN_CH_ALLOCATE_TRACER
+            allocate_tracer::dtor();
+#endif
+        }
+
+        channel_shared_state(const channel_shared_state &) = default;
+        channel_shared_state(channel_shared_state &&) = default;
+        channel_shared_state & operator = (const channel_shared_state &) = default;
+        channel_shared_state & operator = (channel_shared_state &&) = default;
 
         static constexpr auto buff_size = buff_size_;
 

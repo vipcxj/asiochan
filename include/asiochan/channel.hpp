@@ -6,6 +6,7 @@
 #include "asiochan/asio.hpp"
 #include "asiochan/channel_buff_size.hpp"
 #include "asiochan/channel_concepts.hpp"
+#include "asiochan/detail/allocate_tracer.hpp"
 #include "asiochan/detail/channel_method_ops.hpp"
 #include "asiochan/detail/channel_shared_state.hpp"
 #include "asiochan/sendable.hpp"
