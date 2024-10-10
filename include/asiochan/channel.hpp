@@ -33,7 +33,7 @@ namespace asiochan
 
         [[nodiscard]] channel_base(
 #if defined(ASIOCHAN_CH_ALLOCATE_TRACER) && defined(ASIOCHAN_CH_ALLOCATE_TRACER_FULL)
-          const std::source_location & src_loc = std::source_location::current()
+          const std::source_location & src_loc
 #endif
         )
           : shared_state_{std::make_shared<shared_state_type>(
@@ -147,6 +147,10 @@ namespace asiochan
         using ops::try_write;
 
         using ops::write;
+
+#if defined(ASIOCHAN_CH_ALLOCATE_TRACER) && defined(ASIOCHAN_CH_ALLOCATE_TRACER_FULL)
+        basic_channel(const std::source_location & src_loc = std::source_location::current()): base(src_loc) {}
+#endif
     };
 
     template <sendable T, channel_buff_size buff_size, asio::execution::executor Executor>
@@ -164,6 +168,10 @@ namespace asiochan
         using ops::try_read;
 
         using ops::read;
+
+#if defined(ASIOCHAN_CH_ALLOCATE_TRACER) && defined(ASIOCHAN_CH_ALLOCATE_TRACER_FULL)
+        basic_read_channel(const std::source_location & src_loc = std::source_location::current()): base(src_loc) {}
+#endif
     };
 
     template <sendable T, channel_buff_size buff_size, asio::execution::executor Executor>
@@ -181,6 +189,10 @@ namespace asiochan
         using ops::try_write;
 
         using ops::write;
+
+#if defined(ASIOCHAN_CH_ALLOCATE_TRACER) && defined(ASIOCHAN_CH_ALLOCATE_TRACER_FULL)
+        basic_write_channel(const std::source_location & src_loc = std::source_location::current()): base(src_loc) {}
+#endif
     };
 
     template <sendable T, channel_buff_size buff_size = 0>
