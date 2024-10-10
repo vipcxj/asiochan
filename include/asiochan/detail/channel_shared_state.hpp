@@ -51,17 +51,30 @@ namespace asiochan::detail
         using buffer_type = channel_buffer<T, buff_size_>;
         using reader_list_type = channel_waiter_list<T, Executor>;
 
-        channel_shared_state() noexcept(noexcept(channel_shared_state_writer_list_base<T, Executor, buff_size_ != unbounded_channel_buff>{}))
+        channel_shared_state(
+#if defined(ASIOCHAN_CH_ALLOCATE_TRACER) && defined(ASIOCHAN_CH_ALLOCATE_TRACER_FULL)
+          const std::source_location & src_loc
+#endif
+        ) noexcept(noexcept(channel_shared_state_writer_list_base<T, Executor, buff_size_ != unbounded_channel_buff>{}))
         {
 #ifdef ASIOCHAN_CH_ALLOCATE_TRACER
-            allocate_tracer::ctor();
+          allocate_tracer::ctor(
+#ifdef ASIOCHAN_CH_ALLOCATE_TRACER_FULL
+            reinterpret_cast<std::uintptr_t>(this),
+            src_loc
+#endif
+          );
 #endif
         }
 
         ~channel_shared_state() noexcept(noexcept(channel_shared_state_writer_list_base<T, Executor, buff_size_ != unbounded_channel_buff>{}))
         {
 #ifdef ASIOCHAN_CH_ALLOCATE_TRACER
-            allocate_tracer::dtor();
+          allocate_tracer::dtor(
+#ifdef ASIOCHAN_CH_ALLOCATE_TRACER_FULL
+            reinterpret_cast<std::uintptr_t>(this)
+#endif
+          );
 #endif
         }
 

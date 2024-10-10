@@ -7,6 +7,7 @@ include(CheckCXXCompilerFlag)
 
 option(ASIOCHAN_USE_STANDALONE_ASIO "Use standalone ASIO instead of Boost.ASIO" OFF)
 option(ASIOCHAN_CH_ALLOCATE_TRACER "Enable allocator tracer of all channels" OFF)
+option(ASIOCHAN_CH_ALLOCATE_TRACER_FULL "Enable full features allocator tracer of all channels" OFF)
 option(ENABLE_TESTING "Enable unit testing." ON)
 
 add_library(${LIB_NAME} INTERFACE)
@@ -29,6 +30,10 @@ endif()
 if (ASIOCHAN_CH_ALLOCATE_TRACER)
   target_compile_definitions(${LIB_NAME} INTERFACE ASIOCHAN_CH_ALLOCATE_TRACER)
 endif()
+if (ASIOCHAN_CH_ALLOCATE_TRACER_FULL)
+  target_compile_definitions(${LIB_NAME} INTERFACE ASIOCHAN_CH_ALLOCATE_TRACER_FULL)
+endif ()
+
 
 include(CMakePackageConfigHelpers)
 write_basic_package_version_file(

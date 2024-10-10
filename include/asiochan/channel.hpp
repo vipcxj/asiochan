@@ -2,6 +2,9 @@
 
 #include <concepts>
 #include <memory>
+#if defined(ASIOCHAN_CH_ALLOCATE_TRACER) && defined(ASIOCHAN_CH_ALLOCATE_TRACER_FULL)
+#include <source_location>
+#endif
 
 #include "asiochan/asio.hpp"
 #include "asiochan/channel_buff_size.hpp"
@@ -28,8 +31,16 @@ namespace asiochan
         static constexpr auto flags = flags_;
         static constexpr auto buff_size = buff_size_;
 
-        [[nodiscard]] channel_base()
-          : shared_state_{std::make_shared<shared_state_type>()}
+        [[nodiscard]] channel_base(
+#if defined(ASIOCHAN_CH_ALLOCATE_TRACER) && defined(ASIOCHAN_CH_ALLOCATE_TRACER_FULL)
+          const std::source_location & src_loc = std::source_location::current()
+#endif
+        )
+          : shared_state_{std::make_shared<shared_state_type>(
+#if defined(ASIOCHAN_CH_ALLOCATE_TRACER) && defined(ASIOCHAN_CH_ALLOCATE_TRACER_FULL)
+            src_loc
+#endif
+          )}
         {
         }
 
