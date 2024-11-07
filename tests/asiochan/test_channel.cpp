@@ -44,6 +44,45 @@ auto avoid() -> asio::awaitable<void>
     co_return;
 }
 
+auto mark_end(asiochan::channel<void> ch) -> asio::awaitable<void>
+{
+    co_await ch.write();
+}
+
+void mark_end(asiochan::unbounded_channel<void> ch)
+{
+    ch.write();
+}
+
+void wait_ch(asio::thread_pool & thread_pool, asiochan::channel<void> ch)
+{
+    auto task = asio::co_spawn(
+        thread_pool,
+        [ch]() -> asio::awaitable<void>
+        {
+            co_await ch.read();
+        },
+        asio::use_future
+    );
+    task.get();
+}
+
+void wait_ch(asio::thread_pool & thread_pool, asiochan::unbounded_channel<void> ch, int n)
+{
+    auto task = asio::co_spawn(
+        thread_pool,
+        [ch, n]() -> asio::awaitable<void>
+        {
+            for (int i = 0; i < n; i++)
+            {
+                co_await ch.read();
+            }
+        },
+        asio::use_future
+    );
+    task.get();
+}
+
 template<asio::execution::executor Executor>
 auto make_timeout(std::chrono::nanoseconds dur, Executor executor) -> asiochan::channel<void, 1>
 {
@@ -289,5 +328,215 @@ TEST_CASE("Channels")
             asio::use_future
         );
         task.get();
+    }
+
+    SECTION("Sync write and async read")
+    {
+        using namespace asiochan;
+        channel<int> ch {};
+        channel<void> end_ch {};
+        std::thread t1([ch]() {
+            ch.write_sync(1);
+        });
+        asio::co_spawn(
+            thread_pool,
+            [ch, end_ch]() -> asio::awaitable<void>
+            {
+                co_await asleep(std::chrono::milliseconds {10});
+                auto v = co_await ch.read();
+                CHECK(v == 1);
+                co_await mark_end(end_ch);
+            },
+            asio::detached
+        );
+        t1.join();
+        wait_ch(thread_pool, end_ch);
+
+        std::thread t2([ch]() {
+            for (int i = 0; i < 5; i++)
+            {
+                ch.write_sync(i);
+            }
+        });
+        asio::co_spawn(
+            thread_pool,
+            [ch, end_ch]() -> asio::awaitable<void>
+            {
+                for (int i = 0; i < 5; i++)
+                {
+                    co_await asleep(std::chrono::milliseconds {10});
+                    auto v = co_await ch.read();
+                    CHECK(v == i);
+                }
+                co_await mark_end(end_ch);
+            },
+            asio::detached
+        );
+        t2.join();
+        wait_ch(thread_pool, end_ch);
+
+        unbounded_channel<void> end_ch2 {};
+        std::vector<std::thread> ts{};
+        int except_sum = 0;
+        for (int i = 0; i < 5; i++)
+        {
+            ts.emplace_back([ch, i]() {
+                ch.write_sync(i);
+            });
+            except_sum += i;
+        }
+        std::atomic_int sum = 0;
+        for (int i = 0; i < 5; i++)
+        {
+            asio::co_spawn(
+                thread_pool,
+                [ch, end_ch2, &sum]() -> asio::awaitable<void>
+                {
+                    co_await asleep(std::chrono::milliseconds {10});
+                    sum += co_await ch.read();
+                    mark_end(end_ch2);
+                },
+                asio::detached
+            );
+        }
+        for (auto & t : ts)
+        {
+            t.join();
+        }
+        wait_ch(thread_pool, end_ch2, 5);
+        CHECK(sum == except_sum);
+    }
+
+    SECTION("Async write and sync read")
+    {
+        using namespace asiochan;
+        channel<int> ch {};
+        std::thread t([ch]() {
+            auto v = ch.read_sync();
+            CHECK(v == 1);
+        });
+        asio::co_spawn(
+            thread_pool,
+            [ch]() -> asio::awaitable<void>
+            {
+                co_await asleep(std::chrono::milliseconds {10});
+                co_await ch.write(1);
+            },
+            asio::detached
+        );
+        t.join();
+
+        std::thread t2([ch]() {
+            for (int i = 0; i < 5; i++)
+            {
+                auto v = ch.read_sync();
+                CHECK(v == i);
+            }
+        });
+        asio::co_spawn(
+            thread_pool,
+            [ch]() -> asio::awaitable<void>
+            {
+                for (int i = 0; i < 5; i++)
+                {
+                    co_await asleep(std::chrono::milliseconds {10});
+                    co_await ch.write(i);
+                }
+            },
+            asio::detached
+        );
+        t2.join();
+
+        std::vector<std::thread> ts{};
+        int except_sum = 0;
+        std::atomic_int sum = 0;
+        for (int i = 0; i < 5; i++)
+        {
+            ts.emplace_back([ch, &sum]() {
+                sum += ch.read_sync();
+            });
+            except_sum += i;
+        }
+        for (int i = 0; i < 5; i++)
+        {
+            asio::co_spawn(
+                thread_pool,
+                [ch, i]() -> asio::awaitable<void>
+                {
+                    co_await asleep(std::chrono::milliseconds {10});
+                    co_await ch.write(i);
+                },
+                asio::detached
+            );
+        }
+        for (auto & t : ts)
+        {
+            t.join();
+        }
+        CHECK(sum == except_sum);
+    }
+
+    SECTION("Sync write and sync read")
+    {
+        using namespace asiochan;
+        channel<int> ch {};
+        {
+            std::thread t1([ch]() {
+                ch.write_sync(1);
+            });
+            std::thread t2([ch]() {
+                auto v = ch.read_sync();
+                CHECK(v == 1);
+            });
+            t1.join();
+            t2.join();
+        }
+
+        {
+            std::thread t1([ch]() {
+                for (int i = 0; i < 5; i++)
+                {
+                    ch.write_sync(i);
+                }
+            });
+            std::thread t2([ch]() {
+                for (int i = 0; i < 5; i++)
+                {
+                    auto v = ch.read_sync();
+                    CHECK(v == i);
+                }
+            });
+            t1.join();
+            t2.join();
+        }
+
+        {
+            std::atomic_int sum = 0;
+            int sum_expect = 0;
+            std::vector<std::thread> ts1 {};
+            for (int i = 0; i < 5; i++)
+            {
+                ts1.emplace_back([ch, &sum]() {
+                    sum += ch.read_sync();
+                });
+                sum_expect += i;
+            }
+            std::vector<std::thread> ts2 {};
+            for (int i = 0; i < 5; i++)
+            {
+                ts2.emplace_back([ch, i]() {
+                    ch.write_sync(i);
+                });
+            }
+            for (auto & t : ts1)
+            {
+                t.join();
+            }
+            for (auto & t : ts2)
+            {
+                t.join();
+            }
+            CHECK(sum == sum_expect);
+        }
     }
 }

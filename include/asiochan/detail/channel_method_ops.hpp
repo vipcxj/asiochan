@@ -62,6 +62,13 @@ namespace asiochan::detail
             co_return std::move(result).template get_received<T>();
         }
 
+        auto read_sync() const -> T
+        requires (static_cast<bool>(flags & readable))
+        {
+            auto result = select_sync(ops::read(derived()));
+            return std::move(result).template get_received<T>();
+        }
+
         // clang-format off
         [[nodiscard]] auto write(T value) const -> asio::awaitable<void, Executor>
         requires (static_cast<bool>(flags & writable))
@@ -69,6 +76,11 @@ namespace asiochan::detail
         // clang-format on
         {
             co_await select(ops::write(std::move(value), derived()));
+        }
+
+        void write_sync(T value) const
+        {
+            select_sync(ops::write(std::move(value), derived()));
         }
 
         // clang-format off

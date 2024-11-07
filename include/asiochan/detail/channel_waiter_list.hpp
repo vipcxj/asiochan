@@ -3,10 +3,13 @@
 #include <concepts>
 #include <cstddef>
 #include <mutex>
+#include <condition_variable>
+#include <variant>
 
 #include <iostream>
 
 #include "asiochan/async_promise.hpp"
+#include "asiochan/detail/overloaded.hpp"
 #include "asiochan/detail/send_slot.hpp"
 #include "asiochan/sendable.hpp"
 
@@ -14,12 +17,80 @@ namespace asiochan::detail
 {
     using select_waiter_token = std::size_t;
 
+    template <sendable T>
+    struct sync_promise
+    {
+        std::optional<T> value;
+        std::mutex mux;
+        std::condition_variable cv;
+
+        template <std::convertible_to<T> U>
+        void set_value(U&& value)
+        {
+            this->value = T{std::forward<U>(value)};
+            cv.notify_one();
+        }
+
+        void set_value() requires std::is_void_v<T>
+        {
+            cv.notify_one();
+        }
+    };
+
+    struct select_sync_t {};
+    inline constexpr select_sync_t select_sync_tag {};
+
+    struct select_async_t {};
+    inline constexpr select_async_t select_async_tag {};
+
     template <asio::execution::executor Executor>
     struct select_wait_context
     {
-        async_promise<select_waiter_token, Executor> promise;
+        using promise_t = std::variant<async_promise<select_waiter_token, Executor>, sync_promise<select_waiter_token>>;
+        using async_promise_t = async_promise<select_waiter_token, Executor>;
+        using sync_promise_t = sync_promise<select_waiter_token>;
+        promise_t promise;
+
         std::mutex mutex;
         bool avail_flag = true;
+
+        select_wait_context(const select_sync_t &): promise(std::in_place_type<sync_promise_t>) {}
+
+        select_wait_context(const select_async_t &): promise(std::in_place_type<async_promise_t>) {}
+
+        void set_token(select_waiter_token token)
+        {
+            std::visit(detail::overloaded{
+                [&token](async_promise<select_waiter_token, Executor> & promise)
+                {
+                    promise.set_value(token);
+                },
+                [&token](sync_promise<select_waiter_token> & promise)
+                {
+                    promise.set_value(token);
+                },
+            }, promise);
+        }
+
+        async_promise_t & get_async_promise()
+        {
+            return std::get<async_promise_t>(promise);
+        }
+
+        const async_promise_t & get_async_promise() const
+        {
+            return std::get<async_promise_t>(promise);
+        }
+
+        sync_promise_t & get_sync_promise()
+        {
+            return std::get<sync_promise_t>(promise);
+        }
+
+        const sync_promise_t & get_sync_promise() const
+        {
+            return std::get<sync_promise_t>(promise);
+        }
     };
 
     template <asio::execution::executor Executor>
@@ -42,7 +113,7 @@ namespace asiochan::detail
     template <sendable T, asio::execution::executor Executor>
     void notify_waiter(channel_waiter_list_node<T, Executor>& waiter)
     {
-        waiter.ctx->promise.set_value(waiter.token);
+        waiter.ctx->set_token(waiter.token);
     }
 
     template <sendable T, asio::execution::executor Executor>

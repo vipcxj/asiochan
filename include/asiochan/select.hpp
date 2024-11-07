@@ -31,7 +31,7 @@ namespace asiochan
     {
         auto result = std::optional<select_result<Ops...>>{};
         auto submit_mutex = std::mutex{};
-        auto wait_ctx = detail::select_wait_context<Executor>{};
+        auto wait_ctx = detail::select_wait_context<Executor>{detail::select_async_tag};
         auto ops_wait_states = std::tuple<typename Ops::wait_state_type...>{};
 
         auto const success_token = co_await suspend_with_promise<detail::select_waiter_token, Executor>(
@@ -72,7 +72,7 @@ namespace asiochan
 
                 if (ready_token)
                 {
-                    wait_ctx->promise.set_value(*ready_token);
+                    wait_ctx->set_token(*ready_token);
                 }
             },
             &submit_mutex,
@@ -107,6 +107,76 @@ namespace asiochan
         assert(result.has_value());
 
         co_return std::move(*result);
+    }
+
+    // clang-format off
+    template <select_op... Ops>
+    requires waitable_selection<Ops...>
+    auto select_sync(Ops... ops_args)
+        -> select_result<Ops...>
+    // clang-format on
+    {
+        auto result = std::optional<select_result<Ops...>>{};
+        auto wait_ctx = detail::select_wait_context<typename detail::head_t<Ops...>::executor_type>(detail::select_sync_tag);
+        auto ops_wait_states = std::tuple<typename Ops::wait_state_type...>{};
+
+        std::unique_lock lk(wait_ctx.get_sync_promise().mux);
+        auto ready_token = std::optional<std::size_t>{};
+
+        ([&]<std::size_t... indices>(std::index_sequence<indices...>)
+        {
+            ([&]<std::size_t channel_index>(auto& op, detail::constant<channel_index>)
+            {
+                constexpr auto op_base_token = detail::select_ops_base_tokens<Ops...>[channel_index];
+
+                if (auto const ready_alternative = op.submit_with_wait(
+                        wait_ctx,
+                        op_base_token,
+                        std::get<channel_index>(ops_wait_states)))
+                {
+                    ready_token = op_base_token + *ready_alternative;
+
+                    return true;
+                }
+
+                return false;
+            }(ops_args, detail::constant<indices>{})
+            or ...);
+        }(std::index_sequence_for<Ops...>{}));
+
+
+        if (!ready_token)
+        {
+            wait_ctx.get_sync_promise().cv.wait(lk);
+            ready_token = wait_ctx.get_sync_promise().value;
+        }
+        auto success_token = *ready_token;
+
+        ([&]<std::size_t... indices>(std::index_sequence<indices...>)
+         {
+             ([&]<select_op Op, std::size_t channel_index>(Op& op, detail::constant<channel_index>)
+              {
+                  constexpr auto op_base_token = detail::select_ops_base_tokens<Ops...>[channel_index];
+
+                  auto successful_alternative = std::optional<std::size_t>{};
+
+                  if (success_token >= op_base_token
+                      and success_token < op_base_token + Op::num_alternatives)
+                  {
+                      successful_alternative = success_token - op_base_token;
+                      result.emplace(op.get_result(*successful_alternative), success_token);
+                  }
+
+                  op.clear_wait(
+                      successful_alternative,
+                      std::get<channel_index>(ops_wait_states));
+              }(ops_args, detail::constant<indices>{}),
+              ...);
+         }(std::index_sequence_for<Ops...>{}));
+
+        assert(result.has_value());
+
+        return std::move(*result);
     }
 
     // clang-format off
