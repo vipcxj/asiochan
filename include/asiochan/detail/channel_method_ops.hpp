@@ -61,11 +61,23 @@ namespace asiochan::detail
             co_return std::move(result).template get_received<T>();
         }
 
+        auto read_sync(interrupter_t & interrupter) const -> std::optional<T>
+        requires (flags_is_readable(flags))
+        {
+            auto result = select_sync(interrupter, ops::read(derived()));
+            if (!result)
+            {
+                return std::nullopt;
+            }
+            
+            return std::move(*result).template get_received<T>();
+        }
+
         auto read_sync() const -> T
         requires (flags_is_readable(flags))
         {
-            auto result = select_sync(ops::read(derived()));
-            return std::move(result).template get_received<T>();
+            interrupter_t interrupter{};
+            return *read_sync(interrupter);
         }
 
         // clang-format off
@@ -76,10 +88,17 @@ namespace asiochan::detail
             co_await select(ops::write(std::move(value), derived()));
         }
 
+        bool write_sync(interrupter_t & interrupter, T value) const
+        requires (flags_is_writable(flags) and !flags_is_forget_oldest(flags) and !is_unbounded(buff_size))
+        {
+            return select_sync(interrupter, ops::write(std::move(value), derived())).has_value();
+        }
+
         void write_sync(T value) const
         requires (flags_is_writable(flags) and !flags_is_forget_oldest(flags) and !is_unbounded(buff_size))
         {
-            select_sync(ops::write(std::move(value), derived()));
+            interrupter_t interrupter{};
+            write_sync(interrupter, std::move(value));
         }
 
         // clang-format off
@@ -141,10 +160,17 @@ namespace asiochan::detail
             co_await select(ops::read(derived()));
         }
 
+        bool read_sync(interrupter_t & interrupter) const
+        requires (flags_is_readable(flags))
+        {
+            return select_sync(interrupter, ops::read(derived())).has_value();
+        }
+
         void read_sync() const
         requires (flags_is_readable(flags))
         {
-            select_sync(ops::read(derived()));
+            interrupter_t interrupter {};
+            read_sync(interrupter);
         }
 
         // clang-format off
@@ -155,10 +181,17 @@ namespace asiochan::detail
             co_await select(ops::write(derived()));
         }
 
+        bool write_sync(interrupter_t & interrupter) const
+        requires (flags_is_writable(flags) and !flags_is_forget_oldest(flags) and !is_unbounded(buff_size))
+        {
+            return select_sync(interrupter, ops::write(derived())).has_value();
+        }
+
         void write_sync() const
         requires (flags_is_writable(flags) and !flags_is_forget_oldest(flags) and !is_unbounded(buff_size))
         {
-            select_sync(ops::write(derived()));
+            interrupter_t interrupter {};
+            write_sync(interrupter);
         }
 
         // clang-format off

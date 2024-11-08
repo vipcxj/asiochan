@@ -9,6 +9,7 @@
 #include <iostream>
 
 #include "asiochan/async_promise.hpp"
+#include "asiochan/sync_promise.hpp"
 #include "asiochan/detail/overloaded.hpp"
 #include "asiochan/detail/send_slot.hpp"
 #include "asiochan/sendable.hpp"
@@ -16,26 +17,6 @@
 namespace asiochan::detail
 {
     using select_waiter_token = std::size_t;
-
-    template <sendable T>
-    struct sync_promise
-    {
-        std::optional<T> value;
-        std::mutex mux;
-        std::condition_variable cv;
-
-        template <std::convertible_to<T> U>
-        void set_value(U&& value)
-        {
-            this->value = T{std::forward<U>(value)};
-            cv.notify_one();
-        }
-
-        void set_value() requires std::is_void_v<T>
-        {
-            cv.notify_one();
-        }
-    };
 
     struct select_sync_t {};
     inline constexpr select_sync_t select_sync_tag {};
@@ -54,7 +35,7 @@ namespace asiochan::detail
         std::mutex mutex;
         bool avail_flag = true;
 
-        select_wait_context(const select_sync_t &): promise(std::in_place_type<sync_promise_t>) {}
+        select_wait_context(const select_sync_t &, interrupter_t & interrupter): promise(std::in_place_type<sync_promise_t>, interrupter) {}
 
         select_wait_context(const select_async_t &): promise(std::in_place_type<async_promise_t>) {}
 

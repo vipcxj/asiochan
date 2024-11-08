@@ -593,4 +593,29 @@ TEST_CASE("Channels")
             CHECK(sum == sum_expect);
         }
     }
+
+    SECTION("Interrupt")
+    {
+        using namespace asiochan;
+        {
+            channel<int> ch {};
+            interrupter_t interrupter;
+            std::thread t1([ch, &interrupter]() mutable {
+                auto is_interrupted = !ch.write_sync(interrupter, 1);
+                CHECK(is_interrupted);
+            });
+            interrupter.interrupt();
+            t1.join();
+        }
+        {
+            channel<int> ch {};
+            interrupter_t interrupter;
+            std::thread t1([ch, &interrupter]() mutable {
+                auto is_interrupted = !ch.read_sync(interrupter);
+                CHECK(is_interrupted);
+            });
+            interrupter.interrupt();
+            t1.join();
+        }
+    }
 }

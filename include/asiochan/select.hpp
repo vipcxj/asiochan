@@ -12,6 +12,7 @@
 
 #include "asiochan/asio.hpp"
 #include "asiochan/async_promise.hpp"
+#include "asiochan/sync_promise.hpp"
 #include "asiochan/detail/channel_shared_state.hpp"
 #include "asiochan/detail/channel_waiter_list.hpp"
 #include "asiochan/detail/select_impl.hpp"
@@ -112,15 +113,17 @@ namespace asiochan
     // clang-format off
     template <select_op... Ops>
     requires waitable_selection<Ops...>
-    auto select_sync(Ops... ops_args)
-        -> select_result<Ops...>
+    auto select_sync(interrupter_t & interrupter, Ops... ops_args)
+        -> std::optional<select_result<Ops...>>
     // clang-format on
     {
+        using wait_context_type = detail::select_wait_context<typename detail::head_t<Ops...>::executor_type>;
         auto result = std::optional<select_result<Ops...>>{};
-        auto wait_ctx = detail::select_wait_context<typename detail::head_t<Ops...>::executor_type>(detail::select_sync_tag);
+        auto wait_ctx = detail::select_wait_context<typename detail::head_t<Ops...>::executor_type>(detail::select_sync_tag, interrupter);
         auto ops_wait_states = std::tuple<typename Ops::wait_state_type...>{};
-
-        std::unique_lock lk(wait_ctx.get_sync_promise().mux);
+        
+        std::mutex select_mux;
+        std::unique_lock lk(select_mux);
         auto ready_token = std::optional<std::size_t>{};
 
         ([&]<std::size_t... indices>(std::index_sequence<indices...>)
@@ -147,7 +150,10 @@ namespace asiochan
 
         if (!ready_token)
         {
-            wait_ctx.get_sync_promise().cv.wait(lk);
+            if (!wait_ctx.get_sync_promise().wait(lk))
+            {
+                return std::nullopt;
+            }
             ready_token = wait_ctx.get_sync_promise().value;
         }
         auto success_token = *ready_token;
@@ -176,7 +182,7 @@ namespace asiochan
 
         assert(result.has_value());
 
-        return std::move(*result);
+        return std::move(result);
     }
 
     // clang-format off
