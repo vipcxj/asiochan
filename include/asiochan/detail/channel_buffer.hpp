@@ -13,7 +13,7 @@
 
 namespace asiochan::detail
 {
-    template <sendable T, channel_buff_size size>
+    template <sendable T, channel_buff_size size, bool forget_oldest>
     class channel_buffer
     {
       public:
@@ -29,8 +29,23 @@ namespace asiochan::detail
 
         void enqueue(send_slot<T>& from) noexcept
         {
-            assert(not full());
-            transfer(from, buff_[(head_ + count_++) % size]);
+            if constexpr(forget_oldest)
+            {
+                if (full())
+                {
+                    transfer<true>(from, buff_[(head_ + count_) % size]);
+                    head_ = (head_ + 1) % size;
+                }
+                else
+                {
+                    transfer(from, buff_[(head_ + count_++) % size]);
+                }
+            }
+            else
+            {
+                assert(not full());
+                transfer(from, buff_[(head_ + count_++) % size]);
+            }
         }
 
         void dequeue(send_slot<T>& to) noexcept
@@ -47,9 +62,9 @@ namespace asiochan::detail
     };
 
     // clang-format off
-    template <channel_buff_size size>
+    template <channel_buff_size size, bool forget_oldest>
     requires (size > 0)
-    class channel_buffer<void, size>
+    class channel_buffer<void, size, forget_oldest>
     // clang-format on
     {
       public:
@@ -72,8 +87,18 @@ namespace asiochan::detail
 
         void enqueue(send_slot<void>& from) noexcept
         {
-            assert(not full());
-            ++count_;
+            if constexpr(forget_oldest)
+            {
+                if (not full())
+                {
+                    ++count_;
+                }
+            }
+            else
+            {
+                assert(not full());
+                ++count_;
+            }
         }
 
         void dequeue(send_slot<void>& to) noexcept
@@ -86,8 +111,8 @@ namespace asiochan::detail
         std::size_t count_ = 0;
     };
 
-    template <sendable T>
-    class channel_buffer<T, 0>
+    template <sendable T, bool forget_oldest>
+    class channel_buffer<T, 0, forget_oldest>
     {
       public:
         [[nodiscard]] auto empty() const noexcept -> bool
@@ -112,9 +137,9 @@ namespace asiochan::detail
     };
 
     // clang-format off
-    template <sendable T>
+    template <sendable T, bool forget_oldest>
     requires (not std::is_void_v<T>)
-    class channel_buffer<T, unbounded_channel_buff>
+    class channel_buffer<T, unbounded_channel_buff, forget_oldest>
     // clang-format on
     {
       public:

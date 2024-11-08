@@ -36,9 +36,7 @@ namespace asiochan
             static constexpr auto num_always_waitfree = []<typename... ChannelTypes>(std::type_identity<ChannelTypes>...)
             {
                 return (static_cast<std::size_t>(ChannelTypes::shared_state_type::write_never_waits) + ...);
-            }
-            (std::type_identity<ChannelsHead>{},
-             std::type_identity<ChannelsTail>{}...);
+            }(std::type_identity<ChannelsHead>{}, std::type_identity<ChannelsTail>{}...);
             static constexpr auto last_always_waitfree
                 = detail::last_t<ChannelsHead, ChannelsTail...>::shared_state_type::write_never_waits;
 
@@ -83,9 +81,8 @@ namespace asiochan
                 auto ready_alternative = std::optional<std::size_t>{};
 
                 ([&]<std::size_t... indices>(std::index_sequence<indices...>)
-                 {
-                     ([&]<typename ChannelState>(const ChannelState& channel_state)
-                      {
+                 { ([&]<typename ChannelState>(const ChannelState& channel_state)
+                    {
                           constexpr auto channel_index = indices;
                           auto const lock = std::scoped_lock{channel_state->mutex()};
 
@@ -101,7 +98,7 @@ namespace asiochan
                           }
                           else if constexpr (ChannelState::element_type::buff_size != 0)
                           {
-                              if (not channel_state->buffer().full())
+                              if (ChannelState::element_type::forget_oldest or not channel_state->buffer().full())
                               {
                                   // Store the value in the buffer.
                                   channel_state->buffer().enqueue(slot_);
@@ -111,10 +108,8 @@ namespace asiochan
                               }
                           }
 
-                          return false;
-                      }(std::get<indices>(channels_).shared_state_ptr())
-                      or ...);
-                 }(std::index_sequence_for<ChannelsHead, ChannelsTail...>{}));
+                          return false; }(std::get<indices>(channels_).shared_state_ptr())
+                    or ...); }(std::index_sequence_for<ChannelsHead, ChannelsTail...>{}));
 
                 return ready_alternative;
             }
@@ -176,8 +171,7 @@ namespace asiochan
                              }(std::get<indices>(channels_).shared_state_ptr())
                              or ...);
 
-                            return ready_alternative;
-                        }(std::index_sequence_for<ChannelsHead, ChannelsTail...>{}));
+                            return ready_alternative; }(std::index_sequence_for<ChannelsHead, ChannelsTail...>{}));
             }
 
             // clang-format off
@@ -188,9 +182,8 @@ namespace asiochan
             // clang-format on
             {
                 ([&]<std::size_t... indices>(std::index_sequence<indices...>)
-                 {
-                     ([&](const auto& channel_state)
-                      {
+                 { ([&](const auto& channel_state)
+                    {
                           constexpr auto channel_index = indices;
                           auto& waiter_node = wait_state.waiter_nodes[channel_index];
 
@@ -201,10 +194,8 @@ namespace asiochan
                           }
 
                           auto const lock = std::scoped_lock{channel_state->mutex()};
-                          channel_state->reader_list().dequeue(*waiter_node);
-                      }(std::get<indices>(channels_).shared_state_ptr()),
-                      ...);
-                 }(std::index_sequence_for<ChannelsHead, ChannelsTail...>{}));
+                          channel_state->reader_list().dequeue(*waiter_node); }(std::get<indices>(channels_).shared_state_ptr()),
+                    ...); }(std::index_sequence_for<ChannelsHead, ChannelsTail...>{}));
             }
 
             [[nodiscard]] auto get_result(std::size_t const successful_alternative) noexcept -> result_type
@@ -212,9 +203,8 @@ namespace asiochan
                 auto result = std::optional<result_type>{};
 
                 ([&]<std::size_t... indices>(std::index_sequence<indices...>)
-                 {
-                     ([&](auto& channel)
-                      {
+                 { ([&](auto& channel)
+                    {
                           constexpr auto channel_index = indices;
 
                           if (successful_alternative == channel_index)
@@ -223,10 +213,8 @@ namespace asiochan
                               return true;
                           }
 
-                          return false;
-                      }(std::get<indices>(channels_))
-                      or ...);
-                 }(std::index_sequence_for<ChannelsHead, ChannelsTail...>{}));
+                          return false; }(std::get<indices>(channels_))
+                    or ...); }(std::index_sequence_for<ChannelsHead, ChannelsTail...>{}));
 
                 assert(result.has_value());
 

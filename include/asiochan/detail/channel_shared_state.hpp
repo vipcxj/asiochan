@@ -42,13 +42,13 @@ namespace asiochan::detail
         static constexpr bool write_never_waits = true;
     };
 
-    template <sendable T, asio::execution::executor Executor, channel_buff_size buff_size_>
+    template <sendable T, asio::execution::executor Executor, channel_buff_size buff_size_, bool forget_oldest_>
     class channel_shared_state
-      : public channel_shared_state_writer_list_base<T, Executor, buff_size_ != unbounded_channel_buff>
+      : public channel_shared_state_writer_list_base<T, Executor, buff_size_ != unbounded_channel_buff && !forget_oldest_>
     {
       public:
         using mutex_type = std::mutex;
-        using buffer_type = channel_buffer<T, buff_size_>;
+        using buffer_type = channel_buffer<T, buff_size_, forget_oldest_>;
         using reader_list_type = channel_waiter_list<T, Executor>;
 
         channel_shared_state(
@@ -84,6 +84,7 @@ namespace asiochan::detail
         channel_shared_state & operator = (channel_shared_state &&) = default;
 
         static constexpr auto buff_size = buff_size_;
+        static constexpr auto forget_oldest = forget_oldest_;
 
         [[nodiscard]] auto reader_list() noexcept -> reader_list_type&
         {
@@ -114,9 +115,9 @@ namespace asiochan::detail
 
     template <sendable SendType,
               asio::execution::executor Executor,
-              channel_buff_size buff_size>
+              channel_buff_size buff_size, bool forget_oldest>
     struct is_channel_shared_state<
-        channel_shared_state<SendType, Executor, buff_size>,
+        channel_shared_state<SendType, Executor, buff_size, forget_oldest>,
         SendType,
         Executor>
       : std::true_type

@@ -24,7 +24,7 @@ namespace asiochan::detail
       public:
         // clang-format off
         [[nodiscard]] auto try_read() const -> std::optional<T>
-        requires (static_cast<bool>(flags & readable))
+        requires (flags_is_readable(flags))
         // clang-format on
         {
             auto result = select_ready(
@@ -41,8 +41,7 @@ namespace asiochan::detail
 
         // clang-format off
         [[nodiscard]] auto try_write(T value) const -> bool
-        requires (static_cast<bool>(flags & writable))
-                 and (buff_size != unbounded_channel_buff)
+        requires (flags_is_writable(flags) and !flags_is_forget_oldest(flags) and !is_unbounded(buff_size))
         // clang-format on
         {
             auto const result = select_ready(
@@ -54,7 +53,7 @@ namespace asiochan::detail
 
         // clang-format off
         [[nodiscard]] auto read() const -> asio::awaitable<T, Executor>
-        requires (static_cast<bool>(flags & readable))
+        requires (flags_is_readable(flags))
         // clang-format on
         {
             auto result = co_await select(ops::read(derived()));
@@ -63,7 +62,7 @@ namespace asiochan::detail
         }
 
         auto read_sync() const -> T
-        requires (static_cast<bool>(flags & readable))
+        requires (flags_is_readable(flags))
         {
             auto result = select_sync(ops::read(derived()));
             return std::move(result).template get_received<T>();
@@ -71,22 +70,21 @@ namespace asiochan::detail
 
         // clang-format off
         [[nodiscard]] auto write(T value) const -> asio::awaitable<void, Executor>
-        requires (static_cast<bool>(flags & writable))
-                 and (buff_size != unbounded_channel_buff)
+        requires (flags_is_writable(flags) and !flags_is_forget_oldest(flags) and !is_unbounded(buff_size))
         // clang-format on
         {
             co_await select(ops::write(std::move(value), derived()));
         }
 
         void write_sync(T value) const
+        requires (flags_is_writable(flags) and !flags_is_forget_oldest(flags) and !is_unbounded(buff_size))
         {
             select_sync(ops::write(std::move(value), derived()));
         }
 
         // clang-format off
         void write(T value) const
-        requires (static_cast<bool>(flags & writable))
-                 and (buff_size == unbounded_channel_buff)
+        requires (flags_is_writable(flags) and (flags_is_forget_oldest(flags) or is_unbounded(buff_size)))
         // clang-format on
         {
             select_ready(ops::write(std::move(value), derived()));
@@ -113,7 +111,7 @@ namespace asiochan::detail
       public:
         // clang-format off
         [[nodiscard]] auto try_read() const -> bool
-        requires (static_cast<bool>(flags & readable))
+        requires (flags_is_readable(flags))
         // clang-format on
         {
             auto const result = select_ready(
@@ -125,8 +123,7 @@ namespace asiochan::detail
 
         // clang-format off
         [[nodiscard]] auto try_write() const -> bool
-        requires (static_cast<bool>(flags & writable))
-                 and (buff_size != unbounded_channel_buff)
+        requires (flags_is_writable(flags) and !flags_is_forget_oldest(flags) and !is_unbounded(buff_size))
         // clang-format on
         {
             auto const result = select_ready(
@@ -138,25 +135,35 @@ namespace asiochan::detail
 
         // clang-format off
         [[nodiscard]] auto read() const -> asio::awaitable<void>
-        requires (static_cast<bool>(flags & readable))
+        requires (flags_is_readable(flags))
         // clang-format on
         {
             co_await select(ops::read(derived()));
         }
 
+        void read_sync() const
+        requires (flags_is_readable(flags))
+        {
+            select_sync(ops::read(derived()));
+        }
+
         // clang-format off
         [[nodiscard]] auto write() const -> asio::awaitable<void>
-        requires (static_cast<bool>(flags & writable))
-                 and (buff_size != unbounded_channel_buff)
+        requires (flags_is_writable(flags) and !flags_is_forget_oldest(flags) and !is_unbounded(buff_size))
         // clang-format on
         {
             co_await select(ops::write(derived()));
         }
 
+        void write_sync() const
+        requires (flags_is_writable(flags) and !flags_is_forget_oldest(flags) and !is_unbounded(buff_size))
+        {
+            select_sync(ops::write(derived()));
+        }
+
         // clang-format off
         void write() const
-        requires (static_cast<bool>(flags & writable))
-                 and (buff_size == unbounded_channel_buff)
+        requires (flags_is_writable(flags) and (flags_is_forget_oldest(flags) or is_unbounded(buff_size)))
         // clang-format on
         {
             select_ready(ops::write(derived()));

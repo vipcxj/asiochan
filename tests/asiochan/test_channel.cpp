@@ -330,6 +330,60 @@ TEST_CASE("Channels")
         task.get();
     }
 
+    SECTION("Unblocked channel")
+    {
+        using namespace asiochan;
+        {
+            unblocked_channel<int> ch {};
+            ch.write(1);
+            ch.write(2);
+            ch.write(3);
+            auto v = ch.read_sync();
+            CHECK(v == 3);
+            REQUIRE_FALSE(ch.try_read());
+        }
+        {
+            unblocked_channel<int, 3> ch {};
+            ch.write(1);
+            ch.write(2);
+            ch.write(3);
+            CHECK(1 == ch.read_sync());
+            CHECK(2 == ch.read_sync());
+            CHECK(3 == ch.read_sync());
+            REQUIRE_FALSE(ch.try_read());
+        }
+        {
+            unblocked_channel<void> ch {};
+            ch.write();
+            ch.write();
+            ch.write();
+            REQUIRE(ch.try_read());
+            REQUIRE_FALSE(ch.try_read());
+        }
+        {
+            unblocked_channel<int> ch {};
+            asio::co_spawn(
+                thread_pool,
+                [ch]() -> asio::awaitable<void>
+                {
+                    for (int i = 0; i < 5; i++)
+                    {
+                        co_await asleep(std::chrono::milliseconds {1});
+                        ch.write(i);
+                    }
+                },
+                asio::detached
+            );
+            int res = -1;
+            do
+            {
+                auto v = ch.read_sync();
+                CHECK(v > res);
+                res = v;
+            } while (res < 4);
+        }
+    }
+
     SECTION("Sync write and async read")
     {
         using namespace asiochan;

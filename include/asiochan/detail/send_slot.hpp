@@ -34,12 +34,23 @@ namespace asiochan::detail
             return value_;
         }
 
+        template<bool override = false>
         friend void transfer(send_slot& from, send_slot& to) noexcept
         {
             assert(from.value_.has_value());
-            assert(not to.value_.has_value());
+            if constexpr(!override)
+            {
+                assert(not to.value_.has_value());
+            }
             to.value_.swap(from.value_);
-            assert(not from.value_.has_value());
+            if constexpr(!override)
+            {
+                assert(not from.value_.has_value());
+            }
+            else
+            {
+                from.value_.reset();
+            }
         }
 
       private:
@@ -54,6 +65,7 @@ namespace asiochan::detail
 
         static void write() noexcept { }
 
+        template<bool override = false>
         friend void transfer(send_slot&, send_slot&) noexcept
         {
         }
