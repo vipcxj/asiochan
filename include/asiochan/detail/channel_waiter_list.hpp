@@ -32,7 +32,7 @@ namespace asiochan::detail
         using sync_promise_t = sync_promise<select_waiter_token>;
         promise_t promise;
 
-        std::mutex mutex;
+        std::mutex mux;
         bool avail_flag = true;
 
         select_wait_context(const select_sync_t &, interrupter_t & interrupter): promise(std::in_place_type<sync_promise_t>, interrupter) {}
@@ -51,6 +51,31 @@ namespace asiochan::detail
                     promise.set_value(token);
                 },
             }, promise);
+        }
+
+        std::mutex & mutex()
+        {
+            return std::holds_alternative<sync_promise_t>(promise) ? get_sync_promise().interrupter.mux : mux;
+        }
+
+        bool make_inavailable()
+        {
+            if (interrupted() || !avail_flag)
+            {
+                return false;
+            }
+            if (std::holds_alternative<sync_promise_t>(promise))
+            {
+                get_sync_promise().interrupter.available = false;
+            }
+            avail_flag = false;
+            return true;
+        }
+
+        bool interrupted()
+        {
+
+            return std::holds_alternative<sync_promise_t>(promise) && get_sync_promise().interrupter.interrupted;
         }
 
         async_promise_t & get_async_promise()
@@ -77,8 +102,8 @@ namespace asiochan::detail
     template <asio::execution::executor Executor>
     auto claim(select_wait_context<Executor>& ctx) -> bool
     {
-        auto const lock = std::scoped_lock{ctx.mutex};
-        return std::exchange(ctx.avail_flag, false);
+        std::lock_guard g(ctx.mutex());
+        return ctx.make_inavailable();
     }
 
     template <sendable T, asio::execution::executor Executor>
@@ -172,16 +197,16 @@ namespace asiochan::detail
                     }
                 };
 
-                auto const lock = std::scoped_lock{node->ctx->mutex, contexts.mutex...};
-                if (node->ctx->avail_flag)
+                auto const lock = std::scoped_lock{node->ctx->mutex(), contexts.mutex()...};
+                if (node->ctx->avail_flag && !node->ctx->interrupted())
                 {
-                    if (not(contexts.avail_flag and ...))
+                    if (((not contexts.avail_flag or contexts.interrupted()) or ...))
                     {
                         return nullptr;
                     }
 
-                    node->ctx->avail_flag = false;
-                    ((contexts.avail_flag = false), ...);
+                    node->ctx->make_inavailable();
+                    (contexts.make_inavailable(), ...);
 
                     pop();
 

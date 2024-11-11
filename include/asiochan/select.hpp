@@ -122,8 +122,6 @@ namespace asiochan
         auto wait_ctx = detail::select_wait_context<typename detail::head_t<Ops...>::executor_type>(detail::select_sync_tag, interrupter);
         auto ops_wait_states = std::tuple<typename Ops::wait_state_type...>{};
         
-        std::mutex select_mux;
-        std::unique_lock lk(select_mux);
         auto ready_token = std::optional<std::size_t>{};
 
         ([&]<std::size_t... indices>(std::index_sequence<indices...>)
@@ -150,8 +148,16 @@ namespace asiochan
 
         if (!ready_token)
         {
-            if (!wait_ctx.get_sync_promise().wait(lk))
+            if (!wait_ctx.get_sync_promise().wait())
             {
+                ([&]<std::size_t... indices>(std::index_sequence<indices...>)
+                {
+                    ([&]<select_op Op, std::size_t channel_index>(Op& op, detail::constant<channel_index>)
+                    {
+                        op.clear_wait(std::nullopt, std::get<channel_index>(ops_wait_states));
+                    }(ops_args, detail::constant<indices>{}),
+                    ...);
+                }(std::index_sequence_for<Ops...>{}));
                 return std::nullopt;
             }
             ready_token = wait_ctx.get_sync_promise().value;

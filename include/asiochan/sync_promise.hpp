@@ -25,38 +25,38 @@ namespace asiochan
         /**
          * @return true if value is set, or interrupted
          */
-        bool wait(std::unique_lock<std::mutex> & lk)
+        bool wait()
         {
+            std::unique_lock lk(interrupter.mux);
             interrupter.cv.wait(lk, [this]() {
-                return value.has_value() || interrupter.interrupted;
+                return !interrupter.available || interrupter.interrupted;
             });
-            return !interrupter.interrupted;
+            return !interrupter.available;
         }
     };
 
     template<>
     struct sync_promise<void>
     {
-        bool done = false;
         interrupter_t & interrupter;
 
         sync_promise(interrupter_t & interrupter_): interrupter(interrupter_) {}
 
         void set_value()
         {
-            done = true;
             interrupter.cv.notify_one();
         }
 
         /**
          * @return true if value is set, or interrupted
          */
-        bool wait(std::unique_lock<std::mutex> & lk)
+        bool wait()
         {
+            std::unique_lock lk(interrupter.mux);
             interrupter.cv.wait(lk, [this]() {
-                return done || interrupter.interrupted;
+                return !interrupter.available || interrupter.interrupted;
             });
-            return !interrupter.interrupted;
+            return !interrupter.available;
         }
     };
 } // namespace asiochan

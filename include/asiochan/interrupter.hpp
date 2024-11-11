@@ -7,13 +7,25 @@ namespace asiochan
 {
     struct interrupter_t
     {
+        std::mutex mux;
         std::condition_variable cv;
         bool interrupted = false;
+        bool available = true;
 
-        void interrupt()
+        bool interrupt()
         {
-            interrupted = true;
-            cv.notify_all();
+            std::lock_guard g(mux);
+            if (available)
+            {
+                interrupted = true;
+                cv.notify_all();
+                return true;
+            }
+            else
+            {
+                return false;
+            }
         }
+
     };
 } // namespace asiochan

@@ -194,7 +194,8 @@ namespace asiochan
                           }
 
                           auto const lock = std::scoped_lock{channel_state->mutex()};
-                          channel_state->reader_list().dequeue(*waiter_node); }(std::get<indices>(channels_).shared_state_ptr()),
+                          channel_state->writer_list().dequeue(*waiter_node);
+                    }(std::get<indices>(channels_).shared_state_ptr()),
                     ...); }(std::index_sequence_for<ChannelsHead, ChannelsTail...>{}));
             }
 
